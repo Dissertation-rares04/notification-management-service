@@ -6,6 +6,8 @@ using NotificationManagementService.WorkerService;
 IHost host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((hostContext, services) =>
     {
+        services.Configure<RabbitMQSettings>(hostContext.Configuration.GetSection("RabbitMQ"));
+
         services.Configure<MailSettings>(hostContext.Configuration.GetSection("MailSettings"));
         services.AddTransient<IMailService, MailService>();
 

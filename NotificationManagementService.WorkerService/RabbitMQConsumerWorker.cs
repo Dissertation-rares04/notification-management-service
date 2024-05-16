@@ -1,9 +1,10 @@
-﻿using Newtonsoft.Json;
+﻿using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using NotificationManagementService.Business.Interface;
+using NotificationManagementService.Core.AppSettings;
 using NotificationManagementService.Core.Model;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using System.Data.Common;
 using System.Text;
 
 namespace NotificationManagementService.WorkerService
@@ -14,21 +15,25 @@ namespace NotificationManagementService.WorkerService
         private IModel? _channel;
 
         private readonly IMessageHandler _messageHandler;
+        private readonly ILogger<RabbitMQConsumerWorker> _logger;
 
-        public RabbitMQConsumerWorker(IMessageHandler messageHandler)
+        public RabbitMQConsumerWorker(IMessageHandler messageHandler, IOptions<RabbitMQSettings> rabbitMQSettings, ILogger<RabbitMQConsumerWorker> logger)
         {
             _messageHandler = messageHandler;
+            _logger = logger;
 
-            InitRabbitMQ();
+            InitRabbitMQ(rabbitMQSettings);
         }
 
-        private void InitRabbitMQ()
+        private void InitRabbitMQ(IOptions<RabbitMQSettings> rabbitMQSettings)
         {
+            _logger.LogInformation($"Setting up rabbitmq connection on {rabbitMQSettings.Value.Hostname}:{rabbitMQSettings.Value.Port}");
+
             //Here we specify the Rabbit MQ Server. we use rabbitmq docker image and use it
             var factory = new ConnectionFactory
             {
-                HostName = "localhost",
-                Port = 5672
+                HostName = rabbitMQSettings.Value.Hostname,
+                Port = rabbitMQSettings.Value.Port
             };
 
             //Create the RabbitMQ connection using connection factory details as i mentioned above
@@ -47,11 +52,14 @@ namespace NotificationManagementService.WorkerService
 
             //Set Event object which listen message from chanel which is sent by producer
             var consumer = new EventingBasicConsumer(_channel);
-            consumer.Received += (model, eventArgs) => {
+            consumer.Received += (model, eventArgs) =>
+            {
                 var body = eventArgs.Body.ToArray();
                 var message = Encoding.UTF8.GetString(body);
                 var messageObj = JsonConvert.DeserializeObject<Message>(message);
                 _messageHandler.HandleMessage(messageObj);
+
+                _logger.LogInformation($"Consumed {message}");
             };
 
             //read the message
